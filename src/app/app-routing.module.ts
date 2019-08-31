@@ -4,7 +4,8 @@ import { PreloadAllModules, RouterModule, Routes } from '@angular/router';
 const routes: Routes = [
   {
     path: '',
-    redirectTo: 'home',
+    // redirectTo: 'home',
+    redirectTo: 'viewer',
     pathMatch: 'full'
   },
   {
@@ -12,8 +13,8 @@ const routes: Routes = [
     loadChildren: () => import('./home/home.module').then(m => m.HomePageModule)
   },
   {
-    path: 'list',
-    loadChildren: () => import('./list/list.module').then(m => m.ListPageModule)
+    path: 'viewer',
+    loadChildren: () => import('./viewer/viewer.module').then(m => m.ViewerPageModule)
   }
 ];
 
