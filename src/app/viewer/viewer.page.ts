@@ -1,7 +1,7 @@
 import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { Geolocation } from '@ionic-native/geolocation/ngx';
 import mapboxgl from 'mapbox-gl';
-import { Scene, PerspectiveCamera, PlaneGeometry, WebGLRenderer, DoubleSide, MeshBasicMaterial, Mesh, Vector3, TextureLoader } from 'three';
+import { Scene, PerspectiveCamera, WebGLRenderer, Vector3 } from 'three';
 import OrbitControls from 'three-orbitcontrols';
 import tilebelt from '@mapbox/tilebelt';
 
@@ -48,75 +48,36 @@ export class ViewerPage implements OnInit {
     this.testTerrainRgb();
   }
 
-  rgbToHeight(r: number, g: number, b: number) {
-    return -10000 + ((r * 256 * 256 + g * 256 + b) * 0.1);
-  }
-
-  getTileUrl(latitude: number, longitude: number, zoom: number) {
-    let [x, y, z] = tilebelt.pointToTile(longitude, latitude, zoom)
-    return `https://api.mapbox.com/v4/mapbox.terrain-rgb/${z}/${x}/${y}.pngraw?access_token=${this.token}`;
-  }
-
-  getPixels(url: string): Promise<Uint8ClampedArray> {
-    return new Promise ((resolve, reject) => {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-  
-      const img = new Image();
-      img.crossOrigin = 'Anonymous';
-      img.src =  url;
-  
-      img.onload = () => {
-        canvas.width = img.width;
-        canvas.height = img.width;
-    
-        context.drawImage(img, 0, 0, img.width, img.width);
-    
-        const imgData = context.getImageData(0, 0, img.width, img.height);
-
-        resolve(imgData.data)
-      }
-    });
+  getTile(latitude: number, longitude: number, zoom: number) {
+    return tilebelt.pointToTile(longitude, latitude, zoom);
   }
 
   async testTerrainRgb() {
+    // const worker = new Worker('./workers/build-mesh.worker', { type: 'module' });
+    const worker = new Worker('./workers/test.worker', { type: 'module' });
+
     await this.getUserLocation();
 
-    const tileUrl = await this.getTileUrl(this.currentLocation.latitude, this.currentLocation.longitude, 15);
-    const pixels = await this.getPixels(tileUrl);
+    const tile = await this.getTile(this.currentLocation.latitude, this.currentLocation.longitude, 15);
 
-    const planeSize = Math.sqrt(pixels.length / 4);
+    console.log(tile);
 
-    const geometry = new PlaneGeometry(planeSize, planeSize, planeSize - 1, planeSize - 1);
+    worker.onmessage = ({ data }) => {
+      console.log(data);
+    };
 
-    for (let i = 0; i < pixels.length; i += 4) {
-      let r = pixels[i + 0];
-      let g = pixels[i + 1];
-      let b = pixels[i + 2];
+    worker.postMessage('test');
 
-      const height = this.rgbToHeight(r, g, b);
+    // MAKE CALL TO WORKER TO GET MESH HERE
 
-      if (!geometry.vertices[i/4]) {
-        console.error(`No vertices at index ${i/4} found.`);
-        break;
-      }
-      geometry.vertices[i/4].z = height;
-    }
-    
-    geometry.verticesNeedUpdate = true;
-    
-    const texture = new TextureLoader().load(tileUrl);
-    const material = new MeshBasicMaterial({ map: texture, side: DoubleSide, wireframe: true });
-    const mesh = new Mesh(geometry, material);
+    // this.scene.add(mesh);
 
-    this.scene.add(mesh);
+    // this.scene.updateMatrixWorld(true);
+    // const position = new Vector3();
+    // position.setFromMatrixPosition(mesh.matrixWorld);
 
-    this.scene.updateMatrixWorld(true);
-    const position = new Vector3();
-    position.setFromMatrixPosition(mesh.matrixWorld);
-
-    this.camera.position.set(position.x, position.y, 500)
-    this.controls.update();
+    // this.camera.position.set(position.x, position.y, 500);
+    // this.controls.update();
   }
 
   animate() {
