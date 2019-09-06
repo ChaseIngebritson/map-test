@@ -46,7 +46,7 @@ function rgbToHeight(r, g, b) {
 
 function getPixels(url) {
   return new Promise ((resolve, reject) => {
-    const canvas = document.createElement('canvas');
+    const canvas = new OffscreenCanvas(250, 250);
     const context = canvas.getContext('2d');
 
     const img = new Image();
