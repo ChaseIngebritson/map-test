@@ -49,7 +49,9 @@ export class ViewerPage implements OnInit {
   }
 
   async testTerrainRgb() {
-    // const worker = new Worker('../workers/build-mesh.worker', { type: 'module' });
+    this.camera.position.set(128, 128, 500);
+    this.controls.update();
+
     const zoom = 15;
 
     await this.getUserLocation();
@@ -59,20 +61,68 @@ export class ViewerPage implements OnInit {
     const genLength = 16;
     const genPattern = this.getGenerationPattern(genLength);
 
+    const worker = new Worker('../workers/build-mesh.worker.ts', { type: 'module' });
+
+    worker.onmessage = async ({ data }) => {
+      const command = data.command;
+
+      switch(command) {
+        case 'getTileHeights':
+          const heights = data.heights;
+          const x = data.x;
+          const y = data.y;
+          const z = data.z;
+          const offset = data.offset;
+
+          const url = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${z}/${x}/${y}.pngraw?access_token=${this.token}`;
+
+          const mesh = await this.heightsToMesh(heights, url);
+
+          this.scene.add(mesh);
+    
+          console.log(`Setting mesh position to [${offset[0] * 250}, ${offset[1] * 250}].`)
+          mesh.position.set(offset[0] * 256, offset[1] * 256, 0);
+    
+          break;
+        case 'setGeometryHeights':
+          
+          break;
+      }
+    }
+
     genPattern.forEach(async (offset, index) => {
       const x = tile[0] + offset[0];
       const y = tile[1] - offset[1];
 
-      console.log(`Generating mesh ${index} for tile [${x}, ${y}] at position [${offset[0]}, ${offset[1]}].`);
-      const mesh = await this.tileToMesh(x, y, zoom);
-      this.scene.add(mesh);
+      const url = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${x}/${y}.pngraw?access_token=${this.token}`;
 
-      console.log(`Setting mesh ${index} position to [${offset[0] * 250}, ${offset[1] * 250}].`)
-      mesh.position.set(offset[0] * 256, offset[1] * 256, 0);
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.src =  url;
+
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.width;
+
+        context.drawImage(img, 0, 0, img.width, img.width);
+
+        const imgData = context.getImageData(0, 0, img.width, img.height);
+
+        worker.postMessage({
+          command: 'getTileHeights',
+          pixels: imgData.data, 
+          x,
+          y,
+          z: zoom,
+          offset
+        });
+
+        console.log(`Generating mesh ${index} for tile [${x}, ${y}] at position [${offset[0]}, ${offset[1]}].`);
+      };
     });
-
-    this.camera.position.set(128, 128, 500);
-    this.controls.update();
   }
 
   animate() {
@@ -147,29 +197,53 @@ export class ViewerPage implements OnInit {
     return output;
   }
 
-  async tileToMesh(x: number, y: number, z: number) {
+  // async tileToMesh(x: number, y: number, z: number) {
 
-    const url = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${z}/${x}/${y}.pngraw?access_token=${this.token}`;
+  //   const url = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${z}/${x}/${y}.pngraw?access_token=${this.token}`;
 
-    const pixels = await this.getPixels(url);
+  //   const pixels = await this.getPixels(url);
 
-    const planeSize = Math.sqrt(pixels.length / 4);
+  //   const planeSize = Math.sqrt(pixels.length / 4);
+
+  //   const geometry = new PlaneGeometry(planeSize, planeSize, planeSize - 1, planeSize - 1);
+
+  //   for (let i = 0; i < pixels.length; i += 4) {
+  //     const r = pixels[i + 0];
+  //     const g = pixels[i + 1];
+  //     const b = pixels[i + 2];
+
+  //     const height = this.rgbToHeight(r, g, b);
+
+  //     if (!geometry.vertices[i / 4]) {
+  //       console.error(`No vertices at index ${i / 4} found.`);
+  //       break;
+  //     }
+  //     geometry.vertices[i / 4].z = height;
+  //   }
+
+  //   geometry.verticesNeedUpdate = true;
+
+  //   const texture = new TextureLoader().load(url);
+  //   const material = new MeshBasicMaterial({ map: texture, side: DoubleSide, wireframe: true });
+  //   const mesh = new Mesh(geometry, material);
+
+  //   return mesh;
+  // }
+
+  async heightsToMesh(heights: Array<number>, url: string) {
+    const planeSize = Math.sqrt(heights.length);
 
     const geometry = new PlaneGeometry(planeSize, planeSize, planeSize - 1, planeSize - 1);
 
-    for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i + 0];
-      const g = pixels[i + 1];
-      const b = pixels[i + 2];
-
-      const height = this.rgbToHeight(r, g, b);
-
-      if (!geometry.vertices[i / 4]) {
-        console.error(`No vertices at index ${i / 4} found.`);
-        break;
+    heights.every((height, index) => {
+      if (!geometry.vertices[index]) {
+        console.error(`No vertices at index ${index} found.`);
+        return false;
       }
-      geometry.vertices[i / 4].z = height;
-    }
+
+      geometry.vertices[index].z = height;
+      return true;
+    });
 
     geometry.verticesNeedUpdate = true;
 
